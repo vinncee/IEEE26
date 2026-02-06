@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+verify_*.py
+convert_tm_model.py
+load_posenet.py
+test_*.py
+posenet_saved/

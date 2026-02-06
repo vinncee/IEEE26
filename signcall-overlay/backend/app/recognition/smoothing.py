@@ -1,59 +1,65 @@
-"""Temporal smoothing of sign recognition predictions to reduce flicker."""
+"""Temporal smoothing of sign recognition predictions to reduce flicker.
+
+Uses confidence-weighted voting so that high-confidence predictions dominate
+over noisy low-confidence ones, and recent predictions count more via
+exponential recency weighting.
+"""
 
 from collections import deque
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 # Global smoothing state (in production, should be per-session)
-_prediction_history: Dict[str, deque] = {}
-SMOOTH_WINDOW_SIZE = 4  # Majority vote over last 4 predictions
+_prediction_history: Dict[str, deque] = {}   # stores (token, confidence) pairs
+SMOOTH_WINDOW_SIZE = 5  # Weighted vote over last 5 predictions
+
+# Recency weights: most recent prediction gets highest weight
+_RECENCY_WEIGHTS = [0.5, 0.6, 0.75, 0.9, 1.0]   # oldest → newest
+
 
 def smooth(pred: dict, session_id: str = "default") -> dict:
     """
-    Apply majority-vote smoothing to prediction history.
-    
-    Args:
-        pred: Current prediction dict {"token": str, "confidence": float, "top2": [...], "ts": int}
-        session_id: Session identifier to maintain separate smoothing histories
-        
-    Returns:
-        dict: Smoothed prediction with same format
+    Apply confidence-weighted majority-vote smoothing.
+
+    Each past prediction votes with weight = confidence × recency_factor.
+    The token with the highest total weighted vote wins.
     """
     if session_id not in _prediction_history:
         _prediction_history[session_id] = deque(maxlen=SMOOTH_WINDOW_SIZE)
-    
+
     history = _prediction_history[session_id]
     current_token = pred["token"]
-    
-    # Add current prediction to history
-    history.append(current_token)
-    
+    current_conf  = pred["confidence"]
+
+    # Store (token, confidence)
+    history.append((current_token, current_conf))
+
     if len(history) < 2:
-        # Not enough history yet, return as-is
         return pred
-    
-    # Majority voting: find most common token in history
-    token_counts = {}
-    for token in history:
-        token_counts[token] = token_counts.get(token, 0) + 1
-    
-    majority_token = max(token_counts, key=token_counts.get)
-    majority_count = token_counts[majority_token]
-    
-    # If current token matches majority, boost confidence
-    # If current token differs from majority, use majority with reduced confidence (debounce)
+
+    # Weighted voting: weight = confidence × recency
+    n = len(history)
+    recency = _RECENCY_WEIGHTS[-n:]   # take the last n weights
+    token_scores: Dict[str, float] = {}
+    for i, (tok, conf) in enumerate(history):
+        w = conf * recency[i]
+        token_scores[tok] = token_scores.get(tok, 0.0) + w
+
+    majority_token = max(token_scores, key=token_scores.get)
+    total_weight   = sum(recency[i] for i in range(n))  # max possible score
+    majority_score = token_scores[majority_token]
+
     if current_token == majority_token:
-        # Token matches majority: confidence boost based on agreement
-        boost = (majority_count - 1) / len(history) * 0.2  # Up to +0.2 boost
-        smoothed_confidence = min(0.99, pred["confidence"] + boost)
+        # Agreement: boost confidence proportional to vote share
+        vote_share = majority_score / max(total_weight, 1e-6)
+        boost = vote_share * 0.15            # up to +0.15
+        smoothed_confidence = min(0.99, current_conf + boost)
     else:
-        # Token differs from majority: use majority token with reduced confidence
-        # This debounces occasional false positives
-        smoothed_confidence = pred["confidence"] * 0.6  # Reduce by 40%
-        majority_token = majority_token
-    
+        # Disagreement: suppress with stronger penalty for low confidence
+        smoothed_confidence = current_conf * 0.50
+
     return {
         "token": majority_token,
-        "confidence": smoothed_confidence,
+        "confidence": round(smoothed_confidence, 4),
         "top2": pred["top2"],
         "ts": pred["ts"]
     }
