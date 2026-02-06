@@ -5,7 +5,8 @@ Tests the full end-to-end flow as it would happen in production.
 """
 
 import sys
-sys.path.insert(0, '/Users/kahei/Documents/GitHub/IEEE26/signcall-overlay/backend')
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.cv.types import LandmarkFrame, LandmarkWindow
 from app.pipeline.orchestrator import process_frame

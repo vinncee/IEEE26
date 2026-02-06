@@ -3,6 +3,7 @@ dist
 .DS_Store
 .env
 backend/.venv
+backend/venv
 backend/__pycache__
 backend/**/*.pyc
 .venv_py311

@@ -1,12 +1,17 @@
 """LLM client for caption generation with anti-hallucination guardrails."""
 
 import logging
+import time
 from openai import OpenAI
 from app import settings
 
 logger = logging.getLogger(__name__)
 
 _client = None
+
+# Simple cooldown to avoid 429 rate limits: cache recent results
+_llm_cache: dict[str, tuple[float, str]] = {}  # key -> (timestamp, result)
+_LLM_COOLDOWN = 5.0  # seconds between LLM calls for the same gloss+style
 
 
 def get_client():
@@ -21,6 +26,14 @@ def gloss_to_english(gloss: str, style: str = "concise") -> str | None:
     
     Returns None if API unavailable or fails (graceful degradation).
     """
+    # Check cache first to avoid rate limits
+    cache_key = f"{gloss}:{style}"
+    now = time.perf_counter()
+    if cache_key in _llm_cache:
+        cached_time, cached_result = _llm_cache[cache_key]
+        if now - cached_time < _LLM_COOLDOWN:
+            return cached_result
+
     client = get_client()
     if client is None:
         logger.warning("OpenAI client not configured – falling back to templates")
@@ -43,6 +56,7 @@ def gloss_to_english(gloss: str, style: str = "concise") -> str | None:
     )
 
     try:
+        t0 = time.perf_counter()
         resp = client.chat.completions.create(
             model=settings.LLM_MODEL,
             messages=[
@@ -52,8 +66,10 @@ def gloss_to_english(gloss: str, style: str = "concise") -> str | None:
             temperature=0.2,
             max_tokens=50,
         )
+        llm_ms = (time.perf_counter() - t0) * 1000
         caption = resp.choices[0].message.content.strip()
-        logger.debug(f"LLM caption: {caption}")
+        logger.info("LLM latency=%.0fms  caption=%r", llm_ms, caption)
+        _llm_cache[cache_key] = (time.perf_counter(), caption)
         return caption
     except Exception as e:
         logger.warning(f"LLM request failed ({e}) – falling back to templates")

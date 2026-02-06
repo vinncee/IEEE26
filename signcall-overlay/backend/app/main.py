@@ -3,13 +3,15 @@ import logging
 from fastapi import FastAPI
 from app.api.ws import router as ws_router
 
-# Configure root logger so debug messages from cv/pipeline are visible
-# when uvicorn is started with --log-level debug
+# Configure root logger so our app messages are visible
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s  %(name)-30s  %(levelname)-7s  %(message)s",
     datefmt="%H:%M:%S",
 )
+# Suppress noisy third-party HTTP/model logs
+for _noisy in ("httpx", "httpcore", "openai", "mediapipe", "absl"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 app = FastAPI(title="SignCall Overlay Backend")
 app.include_router(ws_router)

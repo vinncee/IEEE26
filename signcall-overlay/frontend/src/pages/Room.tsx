@@ -20,6 +20,8 @@ export default function Room() {
   const [mode, setMode] = useState<CaptionOut["mode"]>("template");
 
   const [modePref, setModePref] = useState<"concise" | "detailed">("concise");
+  const modePrefRef = useRef(modePref);
+  useEffect(() => { modePrefRef.current = modePref; }, [modePref]);
 
   const wsRef = useRef<ReturnType<typeof createWs> | null>(null);
 
@@ -63,7 +65,8 @@ export default function Room() {
           session,
           user,
           ts: Date.now(),
-          image_jpeg_b64: b64
+          image_jpeg_b64: b64,
+          style: modePrefRef.current
         };
         wsRef.current.send(msg);
       }
