@@ -18,7 +18,7 @@ export interface ConnectionState {
 }
 
 const WS_URL =
-  process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws/video";
+  process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
 export function useSignBridgeWS() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -86,13 +86,16 @@ export function useSignBridgeWS() {
     setConnection({ status: "disconnected" });
   }, []);
 
-  const sendFrame = useCallback((frameData: string) => {
+  const sendFrame = useCallback((frameData: string, style: "concise" | "detailed" = "concise") => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
         JSON.stringify({
           type: "frame",
-          data: frameData,
+          session: "room1",
+          user: "signerA",
+          image_jpeg_b64: frameData,
           ts: Date.now(),
+          style,
         }),
       );
     }
@@ -104,6 +107,8 @@ export function useSignBridgeWS() {
         wsRef.current.send(
           JSON.stringify({
             type: "correction",
+            session: "room1",
+            user: "signerA",
             incorrect_token: incorrectToken,
             correct_token: correctToken,
             ts: Date.now(),
