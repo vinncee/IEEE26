@@ -4,15 +4,17 @@ import time
 from app import settings
 from app.cv.types import LandmarkWindow
 from app.cv.mediapipe_extractor import extract_landmarks
-from app.recognition.classifier import predict
+from app.recognition.detector import is_signing
+from app.recognition.classifier import predict, predict_with_tm
 from app.recognition.smoothing import smooth
 from app.nlp.translator import translate
 from app.nlp.profile import get_profile
 
 logger = logging.getLogger(__name__)
 
-# Per-session sliding buffer of LandmarkFrames
+# Per-session sliding buffer of LandmarkFrames + raw BGR frames
 _buffers: dict[str, list] = {}
+_frame_buffers: dict[str, list] = {}   # raw BGR frames for TM model
 WINDOW_SIZE = 10       # number of frames in one recognition window
 MAX_BUF_LEN = 30       # cap to prevent unbounded memory growth
 
@@ -54,29 +56,44 @@ async def process_frame(session: str, user: str, frame_bgr, ts: int, style: str 
 
     key = _get_buf_key(session, user)
     buf = _buffers.setdefault(key, [])
+    fbuf = _frame_buffers.setdefault(key, [])
 
     lf = extract_landmarks(frame_bgr, ts)
     buf.append(lf)
+    fbuf.append(frame_bgr)
 
-    # Keep buffer bounded
+    # Keep buffers bounded
     if len(buf) > MAX_BUF_LEN:
         _buffers[key] = buf[-MAX_BUF_LEN:]
         buf = _buffers[key]
+    if len(fbuf) > MAX_BUF_LEN:
+        _frame_buffers[key] = fbuf[-MAX_BUF_LEN:]
+        fbuf = _frame_buffers[key]
 
     # Need at least WINDOW_SIZE frames before running recognition
     if len(buf) < WINDOW_SIZE:
         return None
 
     frames = buf[-WINDOW_SIZE:]
+    raw_frames = fbuf[-WINDOW_SIZE:]
     window = LandmarkWindow(
         frames=frames,
         ts_start=frames[0].ts,
         ts_end=frames[-1].ts,
     )
 
-    pred = predict(window)
+    # Skip classification when hands are idle / absent
+    if not is_signing(window):
+        logger.debug("ts=%d  not signing – skipping recognition", ts)
+        return None
+
+    pred = predict_with_tm(window, raw_frames, session_id=key, ts=ts)
+    # Gate: suppress very low-confidence predictions (noise)
+    if pred["confidence"] < 0.35:
+        logger.debug("ts=%d  low confidence %.2f – skipping", ts, pred["confidence"])
+        return None
     # Pass session:user as session_id for per-session smoothing history
-    pred = smooth(pred, session_id=f"{session}:{user}")
+    pred = smooth(pred, session_id=key)
     profile = get_profile(session, user)
     out = translate(pred, profile, style=style)
 

@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.ws import router as ws_router
 
 # Configure root logger so our app messages are visible
@@ -14,6 +15,15 @@ for _noisy in ("httpx", "httpcore", "openai", "mediapipe", "absl"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 app = FastAPI(title="SignCall Overlay Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten to your Vercel URL in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(ws_router)
 
 
