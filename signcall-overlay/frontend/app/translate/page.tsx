@@ -14,7 +14,36 @@ export default function TranslatePage() {
   const [isLoadingCamera, setIsLoadingCamera] = useState(false);
   const [captionSize, setCaptionSize] = useState(24);
 
-  const { connection, latestCaption, connect, disconnect } = useSignBridgeWS();
+  const { connection, latestCaption, connect, disconnect, sendFrame } = useSignBridgeWS();
+
+  // Frame capture loop: capture JPEG from video at ~8 FPS and send to backend
+  useEffect(() => {
+    if (!isRecording || connection.status !== "connected") return;
+    let alive = true;
+    const fps = 8;
+    const intervalMs = Math.floor(1000 / fps);
+
+    const tick = () => {
+      if (!alive) return;
+      const v = videoRef.current;
+      if (v && v.readyState >= 2 && v.videoWidth > 0) {
+        const canvas = document.createElement("canvas");
+        canvas.width = v.videoWidth;
+        canvas.height = v.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          const b64 = dataUrl.split(",")[1] || "";
+          if (b64) sendFrame(b64);
+        }
+      }
+      setTimeout(tick, intervalMs);
+    };
+
+    tick();
+    return () => { alive = false; };
+  }, [isRecording, connection.status, sendFrame]);
 
   // Start camera stream
   const getCamera = async () => {
