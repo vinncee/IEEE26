@@ -4,6 +4,7 @@ export type FrameIn = {
   user: string;
   ts: number;
   image_jpeg_b64: string;
+  style?: "concise" | "detailed";
 };
 
 export type CaptionOut = {

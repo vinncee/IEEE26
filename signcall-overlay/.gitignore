@@ -5,3 +5,4 @@ dist
 backend/.venv
 backend/__pycache__
 backend/**/*.pyc
+.venv_py311

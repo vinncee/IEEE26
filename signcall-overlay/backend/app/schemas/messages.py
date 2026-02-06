@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Literal, List
+from typing import Literal, Optional
 
 class FrameIn(BaseModel):
     type: Literal["frame"]
@@ -7,6 +7,7 @@ class FrameIn(BaseModel):
     user: str
     ts: int
     image_jpeg_b64: str
+    style: Optional[Literal["concise", "detailed"]] = "concise"
 
 class CaptionOut(BaseModel):
     type: Literal["caption"]

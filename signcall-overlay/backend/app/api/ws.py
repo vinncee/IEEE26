@@ -27,7 +27,8 @@ async def ws_endpoint(ws: WebSocket):
                     if img is None:
                         continue
                     caption = await process_frame(
-                        frame_in.session, frame_in.user, img, frame_in.ts
+                        frame_in.session, frame_in.user, img, frame_in.ts,
+                        style=frame_in.style
                     )
                     if caption:
                         await ws.send_json(caption)

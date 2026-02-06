@@ -19,7 +19,7 @@ def _get_buf_key(session: str, user: str) -> str:
     return f"{session}:{user}"
 
 
-async def process_frame(session: str, user: str, frame_bgr, ts: int):
+async def process_frame(session: str, user: str, frame_bgr, ts: int, style: str = "concise"):
     key = _get_buf_key(session, user)
     buf = _buffers.setdefault(key, [])
 
@@ -46,7 +46,7 @@ async def process_frame(session: str, user: str, frame_bgr, ts: int):
     # Pass session:user as session_id for per-session smoothing history
     pred = smooth(pred, session_id=f"{session}:{user}")
     profile = get_profile(session, user)
-    out = translate(pred, profile)
+    out = translate(pred, profile, style=style)
 
     # Count how many frames in the window had at least one hand
     hands_count = sum(1 for f in frames if f.hands)
